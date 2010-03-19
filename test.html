@@ -1,0 +1,17 @@
+<html>
+	<head>
+		<script type="text/javascript">
+			// This element contains the data we want to send to the event
+			var element = document.createElement("MyExtensionDataElement");  
+			element.setAttribute("attribute1", "foobar");  
+			element.setAttribute("attribute2", "hello world");  
+			document.documentElement.appendChild(element);  
+
+			var evt = document.createEvent("Events");  
+			evt.initEvent("SaveDatabaseEvent", true, false);  
+			element.dispatchEvent(evt);
+		</script>
+	</head>
+	<body>
+	</body>
+</html>
