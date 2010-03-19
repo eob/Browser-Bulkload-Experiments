@@ -84,10 +84,53 @@ var databaseSaver = {
                       .getService(Components.interfaces.nsIIOService)
                       .newURI(uri, null, null);
       persist.saveURI(obj_URI, null, null, null, "", file);
-  }  
-  // _writeFile: function(aFile, aData) { 
-  // },  
+  },
+  saveJSON: function(event) { 
+      event.stopPropagation();
+      alert("hi");
+      var uri = "http://people.csail.mit.edu/marcua/10.json";
+      var toFilename = "testdb.sqlite";
+      jQuery.get(uri, function(results) {
+          results = results.Posts.results;
+          var file = Components.classes["@mozilla.org/file/local;1"]
+                                       .createInstance(Components.interfaces.nsILocalFile);
+          file.initWithPath("~/" + toFilename); // download destination
+          var storageService = Components.classes["@mozilla.org/storage/service;1"]  
+                                         .getService(Components.interfaces.mozIStorageService); 
+          var db = storageService.openDatabase(file);
+          var sqlStatement = "INSERT INTO test VALUES (";
+          for (var col = 0; col < results[0].length; col++) {
+              var index  = col + 1;
+              sqlStatement += "?" + index + ", " ;
+          }
+          sqlStatement = sqlStatement.substr(0, sqlStatement.length - 2);
+          sqlStatement += ");";
+          alert(sqlStatement);
+          alert("create table!!");
+/*          var stmt = db.createStatement(sqlStatement);
+          var params = stmt.newBindingParamsArray();
+          for (var rownum in results) {
+              var bp = params.newBindingParams();
+              var row = results[rownum];
+              for (var colnum in row) {
+                  bp.bindByIndex(colnum, row[colnum]);
+              }
+              params.addParams(bp);
+          }
+          stmt.bindParameters(params);
+          // execute as a single transaction
+          db.executeAsync([stmt], 1, {  
+              handleCompletion: function(aReason) {  
+                 if (aReason != Components.interfaces.mozIStorageStatementCallback.REASON_FINISHED)  
+                    print("Query canceled or aborted!");  
+                 } else {
+                     alert("Done");
+                 }
+          });  // end async execution
+          */
+      }, "json");  // end AJAX request
+  }  // end saveJSON
 };
 
 // The last 'true' allows unpriviledged javascript to access this handler
-document.addEventListener("SaveDatabaseEvent", databaseSaver.save, false, true);
+document.addEventListener("SaveDatabaseEvent", databaseSaver.saveJSON, false, true);
