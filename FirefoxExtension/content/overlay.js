@@ -46,7 +46,7 @@ var databaseSaver = {
   //     this._dir = null;  
   // },  
 
-  fileSizes:["1","2","3"],
+  fileSizes:["5","500","1000","5000","10000","50000","100000","200000"],
   currentFileSize:0,
 
   strategies:2,
@@ -58,6 +58,7 @@ var databaseSaver = {
   time:0,
   logFile:null,
   converter:null,
+  isSqliteDownloadComplete:false,
   
   beginTest:function(event) {
       event.stopPropagation();  
@@ -96,6 +97,7 @@ var databaseSaver = {
      databaseSaver.converter.writeString(str);  
   },
   incrementLoopVariables:function() {
+      // alert("incrementLoopVariables");
       databaseSaver.currentIteration += 1;
       if (databaseSaver.currentIteration >= databaseSaver.iterationsPerFile) {
           // We've done all the iterations. Reset and change strategy
@@ -119,28 +121,33 @@ var databaseSaver = {
       }
       return true;
   },
-  runTestOnce: function(event) {
-      
+  runTestOnce: function() {
+      var str = databaseSaver.currentFileSize + "," + databaseSaver.currentStrategy + "," + databaseSaver.currentIteration;
+      alert(str);
       /*
        * Setup parameters for the test
        */
-      var urlPrefix  = "http://people.csail.mit.edu/eob/bulkloadTest/"; 
+      var urlPrefix  = "http://marcua.csail.mit.edu:7002/gzip-static/bulkload_"; 
       var sqliteSuffix  = ".sqlite"; 
       var jsonSuffix  = ".json"; 
 
       var fileSize = databaseSaver.fileSizes[databaseSaver.currentFileSize];
+      // alert("runTestOnce -> Strategy " + databaseSaver.currentStrategy);
       if (databaseSaver.currentStrategy == 0) {
+          // alert("Routing to SQLite");
           // SQLite
           var url = urlPrefix + fileSize + sqliteSuffix;
           databaseSaver.runSqliteTestOnce(url);
       }
       else if (databaseSaver.currentStrategy == 1) {
           // JSON
+          // alert("Routing to JSON");
           var url = urlPrefix + fileSize + jsonSuffix;
           databaseSaver.runJsonTestOnce(url);
       }
   },
   runSqliteTestOnce: function(url) { 
+      databaseSaver.isSqliteDownloadComplete = false;
       var toFilename = "testdb.sqlite";
       var persist = Components.classes["@mozilla.org/embedding/browser/nsWebBrowserPersist;1"]
                       .createInstance(Components.interfaces.nsIWebBrowserPersist);
@@ -156,25 +163,43 @@ var databaseSaver = {
      persist.progressListener = {
         onDoanloadStateChange: function(aState, aDownload) {
         },
+        // onStatusChange: function(aWebProgress,
+        //                     aRequest,
+        //                     aStatus,
+        //                     aMessage) {
+        //     alert("Status changed to: " + aStatus);
+        // },
         onStateChange: function(nsIWebProgress, nsIRequest, aStateFlags, aStatus, aDownload) {
-            if (aStateFlags && 0x00000010) {
+            if (databaseSaver.isSqliteDownloadComplete == true) {
                 // Try to open a database connection to the file
-                var storageService = Components.classes["@mozilla.org/storage/service;1"]  
-                                        .getService(Components.interfaces.mozIStorageService);  
-                var mDBConn = storageService.openDatabase(file);
-                
-                var time2 = (new Date).getTime();
-                var time1 = databaseSaver.time;
-                databaseSaver.time = 0;
-                
-                databaseSaver.logTime(time2-time1);
-                if (databaseSaver.incrementLoopVariables()) {
-                    databaseSaver.runTestOnce();
+                if (aStateFlags & 0x10) {
+                    var storageService = Components.classes["@mozilla.org/storage/service;1"]  
+                                            .getService(Components.interfaces.mozIStorageService);  
+                    var mDBConn = storageService.openDatabase(file);
+
+                    var time2 = (new Date).getTime();
+                    var time1 = databaseSaver.time;
+                    databaseSaver.time = 0;
+
+                    databaseSaver.logTime(time2-time1);
+                    // alert("SQLite Test Finished")
+                    if (databaseSaver.incrementLoopVariables()) {
+                        databaseSaver.runTestOnce();
+                    }
+                    
                 }
-                
             }
         },
-        onProgressChange: function() {}        
+        onProgressChange: function(aWebProgress,
+                                aRequest,
+                                aCurSelfProgress,
+                                aMaxSelfProgress,
+                                aCurTotalProgress,
+                                aMaxTotalProgress) {
+            if (aCurSelfProgress == aMaxSelfProgress) {
+                databaseSaver.isSqliteDownloadComplete = true;
+            }
+        }
       };                  
 
       var obj_URI = Components.classes["@mozilla.org/network/io-service;1"]
@@ -191,6 +216,7 @@ var databaseSaver = {
       file.initWithPath("~/" + toFilename); // download destination
       // Remove the file if it exists
       if (file.exists()) {
+          // alert("deleting file for databse for URL: " + url);
           file.remove(false);          
       }
 
@@ -236,6 +262,11 @@ var databaseSaver = {
               var time1 = databaseSaver.time;
               databaseSaver.time = 0;
               databaseSaver.logTime(time2-time1);
+              // alert("JSON Test Finished")
+              if (databaseSaver.incrementLoopVariables()) {
+                  databaseSaver.runTestOnce();
+              }
+              
           });
           // Call once create is done.
           var createFunc = successFunc("Create failed!", function() {
