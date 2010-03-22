@@ -88,10 +88,9 @@ var databaseSaver = {
   saveJSON: function(event) { 
       event.stopPropagation();
       alert("hi");
-      var uri = "http://people.csail.mit.edu/marcua/10.json";
+      var uri = "http://people.csail.mit.edu/marcua/bulkload_5.json";
       var toFilename = "testdb.sqlite";
       jQuery.get(uri, function(results) {
-          results = results.Posts.results;
           var file = Components.classes["@mozilla.org/file/local;1"]
                                        .createInstance(Components.interfaces.nsILocalFile);
           file.initWithPath("~/" + toFilename); // download destination
@@ -99,7 +98,7 @@ var databaseSaver = {
                                          .getService(Components.interfaces.mozIStorageService); 
           var db = storageService.openDatabase(file);
           var insert = "INSERT INTO noise VALUES (";
-          var create = "CREATE TABLE IF NOT EXISTS noise(";
+          var create = "CREATE TABLE noise(";
           for (var col = 0; col < results[0].length; col++) {
               var index  = col + 1;
               insert += "?" + index + ", " ;
@@ -109,27 +108,14 @@ var databaseSaver = {
           create = create.substr(0, create.length - 2);
           insert += ");";
           create += ");";
+
           var cStmt;
-          var iStmt;
           try {
               cStmt = db.createStatement(create);
-              iStmt = db.createStatement(insert);
           } catch (e) { 
               alert(db.lastErrorString);
           }
-          alert('before binding');
 
-          var params = iStmt.newBindingParamsArray();
-          for (var rownum in results) {
-             var bp = params.newBindingParams();
-             var row = results[rownum];
-             for (var colnum in row) {
-                 bp.bindByIndex(colnum, row[colnum]);
-             }
-             params.addParams(bp);
-          }
-          iStmt.bindParameters(params);
-          alert('done binding');
           // successFunc returns a function which you can pass to mozStorage's handleCompletion:
           //   it prints badmsg on failure, or calls goodFunc on success.
           var successFunc = function(badmsg, goodFunc) {
@@ -148,8 +134,23 @@ var databaseSaver = {
           });
           // Call once create is done.
           var createFunc = successFunc("Create failed!", function() {
-                  // execute inserts
-                db.executeAsync([iStmt], 1, {handleCompletion: insertFunc});
+              var iStmt;
+              try{
+                  iStmt = db.createStatement(insert);
+              } catch (e) { 
+                  alert(db.lastErrorString);
+              }
+              var params = iStmt.newBindingParamsArray();
+              for (var rownum in results) {
+                 var bp = params.newBindingParams();
+                 var row = results[rownum];
+                 for (var colnum in row) {
+                     bp.bindByIndex(colnum, row[colnum]);
+                 }
+                 params.addParams(bp);
+              }
+              iStmt.bindParameters(params);
+              db.executeAsync([iStmt], 1, {handleCompletion: insertFunc});
           });
           // execute create
           db.executeAsync([cStmt], 1, {handleCompletion: createFunc});

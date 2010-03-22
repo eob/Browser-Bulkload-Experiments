@@ -1,9 +1,11 @@
+import json
 import sqlite3
 import random
 
 alphabet = 'abcdefghijklmnopqrstuvwxyz'
 schema = ('var1', 'var2', 'var3', 'var4', 'var5')
-rowcounts = (500,1000,5000,10000,50000,100000,200000)
+#rowcounts = (500,1000,5000,10000,50000,100000,200000)
+rowcounts = (5,)
 
 def randstring(length):
     string = ''
@@ -24,9 +26,20 @@ def build_sqlite_dataset(schema, numrows):
     db.close()
     print "Created DB with %i rows" % numrows
 
+def build_json_dataset(schema, numrows):
+    print "Creating JSON with %i rows" % numrows
+    rows = []
+    for i in range(0,numrows):
+        rows.append([randstring(255), randstring(255), randstring(255), randstring(255), randstring(255)])
+    f = open("bulkload_%i.json" % (numrows), "w+")
+    f.write(json.dumps(rows))
+    f.close()
+    print "Created JSON with %i rows" % numrows
+
+
 for rowcount in rowcounts:
     # Generate a data set
     build_sqlite_dataset(schema, rowcount)
-    # Todo: put JSON dataset build call here
+    build_json_dataset(schema, rowcount)
     # Note: the JSON files will have different strings, but they are fixed
     # length random strings so this shouldn't affect compression, etc.
