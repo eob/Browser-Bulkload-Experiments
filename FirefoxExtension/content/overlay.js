@@ -25,10 +25,10 @@ var filecache = {
                                   .getService(Components.interfaces.nsIPromptService);
     promptService.alert(window, this.strings.getString("helloMessageTitle"),
                                 this.strings.getString("helloMessage"));
-  },
-
+  }
 };
 window.addEventListener("load", function(e) { filecache.onLoad(e); }, false);
+
 
 var databaseSaver = {  
   // Directory to save sessions (nsILocalFile)  
@@ -45,26 +45,114 @@ var databaseSaver = {
   // uninit: function() { 
   //     this._dir = null;  
   // },  
-  save: function(event) { 
-      event.stopPropagation();
-      alert("hi");
-      // var ss = Components.classes["@mozilla.org/browser/sessionstore;1"]  
-      //   .getService(Components.interfaces.nsISessionStore); 
-      //    var state = ss.getBrowserState();  
-      // var fileName = "session_" + Date.now() + ".js";  
-      // var file = this._dir.clone();  
-      // file.append(fileName); 
-      // this._writeFile(file, state);  
-      var uri = "http://people.csail.mit.edu/eob/testdb.sqlite";
-      var toFilename = "testdb.sqlite";
 
+  fileSizes:["1","2","3"],
+  currentFileSize:0,
+
+  strategies:2,
+  currentStrategy:0,
+
+  iterationsPerFile:3,
+  currentIteration:0,
+
+  time:0,
+  logFile:null,
+  converter:null,
+  
+  beginTest:function(event) {
+      event.stopPropagation();  
+
+      var toFilename = "browser.csv";
       var persist = Components.classes["@mozilla.org/embedding/browser/nsWebBrowserPersist;1"]
                       .createInstance(Components.interfaces.nsIWebBrowserPersist);
+      databaseSaver.logFile = Components.classes["@mozilla.org/file/local;1"]
+                                   .createInstance(Components.interfaces.nsILocalFile);
+      databaseSaver.logFile.initWithPath("~/" + toFilename); // download destination
+                      
+      // Remove the file if it exists
+      if (databaseSaver.logFile.exists()) {
+         databaseSaver.logFile.remove(false);          
+      }
+      databaseSaver.logFile.create(Components.interfaces.nsIFile.NORMAL_FILE_TYPE,777);
 
+      var foStream = Components.classes["@mozilla.org/network/file-output-stream;1"].  
+                               createInstance(Components.interfaces.nsIFileOutputStream);  
+
+      // use 0x02 | 0x10 to open file for appending.  
+      foStream.init(databaseSaver.logFile, 0x02 | 0x08 | 0x20, 0666, 0);   
+      // write, create, truncate  
+      // In a c file operation, we have no need to set file mode with or operation,  
+      // directly using "r" or "w" usually.  
+
+      // if you are sure there will never ever be any non-ascii text in data you can   
+      // also call foStream.writeData directly  
+      databaseSaver.converter = Components.classes["@mozilla.org/intl/converter-output-stream;1"].  
+                                createInstance(Components.interfaces.nsIConverterOutputStream);  
+      databaseSaver.converter.init(foStream, "UTF-8", 0, 0);  
+      databaseSaver.runTestOnce();
+  },
+  logTime:function(t) {
+     var str = databaseSaver.currentFileSize + "," + databaseSaver.currentStrategy + "," + databaseSaver.currentIteration + "," + t + '\n';
+     databaseSaver.converter.writeString(str);  
+  },
+  incrementLoopVariables:function() {
+      databaseSaver.currentIteration += 1;
+      if (databaseSaver.currentIteration >= databaseSaver.iterationsPerFile) {
+          // We've done all the iterations. Reset and change strategy
+          databaseSaver.currentIteration = 0;
+          
+          databaseSaver.currentStrategy += 1;
+          if (databaseSaver.currentStrategy >= databaseSaver.strategies) {
+              // We've done all the strategies. Reset and change the file
+              databaseSaver.currentStrategy = 0;
+              
+              databaseSaver.currentFileSize += 1;
+              if (databaseSaver.currentFileSize >= databaseSaver.fileSizes.length) {
+                  // We've done all the file sizes. Return false.
+                  databaseSaver.converter.close(); // this closes foStream
+            
+                  alert("TEST DONE");
+                  return false;
+              }
+          }          
+          
+      }
+      return true;
+  },
+  runTestOnce: function(event) {
+      
+      /*
+       * Setup parameters for the test
+       */
+      var urlPrefix  = "http://people.csail.mit.edu/eob/bulkloadTest/"; 
+      var sqliteSuffix  = ".sqlite"; 
+      var jsonSuffix  = ".json"; 
+
+      var fileSize = databaseSaver.fileSizes[databaseSaver.currentFileSize];
+      if (databaseSaver.currentStrategy == 0) {
+          // SQLite
+          var url = urlPrefix + fileSize + sqliteSuffix;
+          databaseSaver.runSqliteTestOnce(url);
+      }
+      else if (databaseSaver.currentStrategy == 1) {
+          // JSON
+          var url = urlPrefix + fileSize + jsonSuffix;
+          databaseSaver.runJsonTestOnce(url);
+      }
+  },
+  runSqliteTestOnce: function(url) { 
+      var toFilename = "testdb.sqlite";
+      var persist = Components.classes["@mozilla.org/embedding/browser/nsWebBrowserPersist;1"]
+                      .createInstance(Components.interfaces.nsIWebBrowserPersist);
       var file = Components.classes["@mozilla.org/file/local;1"]
                                    .createInstance(Components.interfaces.nsILocalFile);
       file.initWithPath("~/" + toFilename); // download destination
                       
+      // Remove the file if it exists
+      if (file.exists()) {
+          file.remove(false);          
+      }
+      
      persist.progressListener = {
         onDoanloadStateChange: function(aState, aDownload) {
         },
@@ -74,26 +162,40 @@ var databaseSaver = {
                 var storageService = Components.classes["@mozilla.org/storage/service;1"]  
                                         .getService(Components.interfaces.mozIStorageService);  
                 var mDBConn = storageService.openDatabase(file);
-                alert("Done");
+                
+                var time2 = (new Date).getTime();
+                var time1 = databaseSaver.time;
+                databaseSaver.time = 0;
+                
+                databaseSaver.logTime(time2-time1);
+                if (databaseSaver.incrementLoopVariables()) {
+                    databaseSaver.runTestOnce();
+                }
+                
             }
         },
         onProgressChange: function() {}        
-      }                  
+      };                  
 
       var obj_URI = Components.classes["@mozilla.org/network/io-service;1"]
                       .getService(Components.interfaces.nsIIOService)
-                      .newURI(uri, null, null);
+                      .newURI(url, null, null);
+
+      databaseSaver.time = (new Date).getTime();
       persist.saveURI(obj_URI, null, null, null, "", file);
   },
-  saveJSON: function(event) { 
-      event.stopPropagation();
-      alert("hi");
-      var uri = "http://people.csail.mit.edu/marcua/bulkload_5.json";
+  runJsonTestOnce:function(url) { 
       var toFilename = "testdb.sqlite";
-      jQuery.get(uri, function(results) {
-          var file = Components.classes["@mozilla.org/file/local;1"]
-                                       .createInstance(Components.interfaces.nsILocalFile);
-          file.initWithPath("~/" + toFilename); // download destination
+      var file = Components.classes["@mozilla.org/file/local;1"]
+                                   .createInstance(Components.interfaces.nsILocalFile);
+      file.initWithPath("~/" + toFilename); // download destination
+      // Remove the file if it exists
+      if (file.exists()) {
+          file.remove(false);          
+      }
+
+      databaseSaver.time = (new Date).getTime();
+      jQuery.get(url, function(results) {
           var storageService = Components.classes["@mozilla.org/storage/service;1"]  
                                          .getService(Components.interfaces.mozIStorageService); 
           var db = storageService.openDatabase(file);
@@ -130,7 +232,10 @@ var databaseSaver = {
           };
           // Call once inserts are done.
           var insertFunc = successFunc("Inserts failed!", function() {
-                alert("Done!");
+              var time2 = (new Date).getTime();
+              var time1 = databaseSaver.time;
+              databaseSaver.time = 0;
+              databaseSaver.logTime(time2-time1);
           });
           // Call once create is done.
           var createFunc = successFunc("Create failed!", function() {
@@ -159,4 +264,5 @@ var databaseSaver = {
 };
 
 // The last 'true' allows unpriviledged javascript to access this handler
-document.addEventListener("SaveDatabaseEvent", databaseSaver.saveJSON, false, true);
+// document.addEventListener("SaveDatabaseEvent", databaseSaver.saveJSON, false, true);
+document.addEventListener("SaveDatabaseEvent", databaseSaver.beginTest, false, true);
