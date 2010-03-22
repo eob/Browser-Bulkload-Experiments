@@ -98,36 +98,61 @@ var databaseSaver = {
           var storageService = Components.classes["@mozilla.org/storage/service;1"]  
                                          .getService(Components.interfaces.mozIStorageService); 
           var db = storageService.openDatabase(file);
-          var sqlStatement = "INSERT INTO test VALUES (";
+          var insert = "INSERT INTO noise VALUES (";
+          var create = "CREATE TABLE IF NOT EXISTS noise(";
           for (var col = 0; col < results[0].length; col++) {
               var index  = col + 1;
-              sqlStatement += "?" + index + ", " ;
+              insert += "?" + index + ", " ;
+              create += "var" + index + " VARCHAR(255), ";
           }
-          sqlStatement = sqlStatement.substr(0, sqlStatement.length - 2);
-          sqlStatement += ");";
-          alert(sqlStatement);
-          alert("create table!!");
-/*          var stmt = db.createStatement(sqlStatement);
-          var params = stmt.newBindingParamsArray();
+          insert = insert.substr(0, insert.length - 2);
+          create = create.substr(0, create.length - 2);
+          insert += ");";
+          create += ");";
+          var cStmt;
+          var iStmt;
+          try {
+              cStmt = db.createStatement(create);
+              iStmt = db.createStatement(insert);
+          } catch (e) { 
+              alert(db.lastErrorString);
+          }
+          alert('before binding');
+
+          var params = iStmt.newBindingParamsArray();
           for (var rownum in results) {
-              var bp = params.newBindingParams();
-              var row = results[rownum];
-              for (var colnum in row) {
-                  bp.bindByIndex(colnum, row[colnum]);
-              }
-              params.addParams(bp);
+             var bp = params.newBindingParams();
+             var row = results[rownum];
+             for (var colnum in row) {
+                 bp.bindByIndex(colnum, row[colnum]);
+             }
+             params.addParams(bp);
           }
-          stmt.bindParameters(params);
-          // execute as a single transaction
-          db.executeAsync([stmt], 1, {  
-              handleCompletion: function(aReason) {  
-                 if (aReason != Components.interfaces.mozIStorageStatementCallback.REASON_FINISHED)  
-                    print("Query canceled or aborted!");  
-                 } else {
-                     alert("Done");
-                 }
-          });  // end async execution
-          */
+          iStmt.bindParameters(params);
+          alert('done binding');
+          // successFunc returns a function which you can pass to mozStorage's handleCompletion:
+          //   it prints badmsg on failure, or calls goodFunc on success.
+          var successFunc = function(badmsg, goodFunc) {
+            var dbFunc = function(aReason) {
+                if (aReason != Components.interfaces.mozIStorageStatementCallback.REASON_FINISHED) { 
+                    print(badmsg);  
+                } else {
+                    goodFunc();
+                }
+            };
+            return dbFunc;
+          };
+          // Call once inserts are done.
+          var insertFunc = successFunc("Inserts failed!", function() {
+                alert("Done!");
+          });
+          // Call once create is done.
+          var createFunc = successFunc("Create failed!", function() {
+                  // execute inserts
+                db.executeAsync([iStmt], 1, {handleCompletion: insertFunc});
+          });
+          // execute create
+          db.executeAsync([cStmt], 1, {handleCompletion: createFunc});
       }, "json");  // end AJAX request
   }  // end saveJSON
 };
