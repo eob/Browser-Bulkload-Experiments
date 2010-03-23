@@ -52,13 +52,13 @@ var databaseSaver = {
   strategies:2,
   currentStrategy:0,
 
-  iterationsPerFile:3,
+  iterationsPerFile:5,
   currentIteration:0,
+  logger:Components.classes["@mozilla.org/consoleservice;1"].getService(Components.interfaces.nsIConsoleService),
 
   time:0,
   logFile:null,
   converter:null,
-  isSqliteDownloadComplete:false,
   
   beginTest:function(event) {
       event.stopPropagation();  
@@ -93,7 +93,7 @@ var databaseSaver = {
       databaseSaver.runTestOnce();
   },
   logTime:function(t) {
-     var str = databaseSaver.currentFileSize + "," + databaseSaver.currentStrategy + "," + databaseSaver.currentIteration + "," + t + '\n';
+     var str = databaseSaver.fileSizes[databaseSaver.currentFileSize] + "," + databaseSaver.currentStrategy + "," + databaseSaver.currentIteration + "," + t + '\n';
      databaseSaver.converter.writeString(str);  
   },
   incrementLoopVariables:function() {
@@ -122,8 +122,6 @@ var databaseSaver = {
       return true;
   },
   runTestOnce: function() {
-      var str = databaseSaver.currentFileSize + "," + databaseSaver.currentStrategy + "," + databaseSaver.currentIteration;
-      alert(str);
       /*
        * Setup parameters for the test
        */
@@ -147,18 +145,23 @@ var databaseSaver = {
       }
   },
   runSqliteTestOnce: function(url) { 
-      databaseSaver.isSqliteDownloadComplete = false;
-      var toFilename = "testdb.sqlite";
+      var ko = new Date();
+      var ji = ko.getTime();
+      var toFilename = ji + ".sqlite";
+      
+      // var toFilename = "testdb.sqlite";
+      // databaseSaver.deleteFile("~/" + toFilename);
       var persist = Components.classes["@mozilla.org/embedding/browser/nsWebBrowserPersist;1"]
                       .createInstance(Components.interfaces.nsIWebBrowserPersist);
       var file = Components.classes["@mozilla.org/file/local;1"]
                                    .createInstance(Components.interfaces.nsILocalFile);
       file.initWithPath("~/" + toFilename); // download destination
+
+      var dbfile = Components.classes["@mozilla.org/file/local;1"]
+                                   .createInstance(Components.interfaces.nsILocalFile);
+      dbfile.initWithPath("~/testdb.sqlite"); // download destination
                       
       // Remove the file if it exists
-      if (file.exists()) {
-          file.remove(false);          
-      }
       
      persist.progressListener = {
         onDoanloadStateChange: function(aState, aDownload) {
@@ -170,25 +173,6 @@ var databaseSaver = {
         //     alert("Status changed to: " + aStatus);
         // },
         onStateChange: function(nsIWebProgress, nsIRequest, aStateFlags, aStatus, aDownload) {
-            if (databaseSaver.isSqliteDownloadComplete == true) {
-                // Try to open a database connection to the file
-                if (aStateFlags & 0x10) {
-                    var storageService = Components.classes["@mozilla.org/storage/service;1"]  
-                                            .getService(Components.interfaces.mozIStorageService);  
-                    var mDBConn = storageService.openDatabase(file);
-
-                    var time2 = (new Date).getTime();
-                    var time1 = databaseSaver.time;
-                    databaseSaver.time = 0;
-
-                    databaseSaver.logTime(time2-time1);
-                    // alert("SQLite Test Finished")
-                    if (databaseSaver.incrementLoopVariables()) {
-                        databaseSaver.runTestOnce();
-                    }
-                    
-                }
-            }
         },
         onProgressChange: function(aWebProgress,
                                 aRequest,
@@ -196,8 +180,23 @@ var databaseSaver = {
                                 aMaxSelfProgress,
                                 aCurTotalProgress,
                                 aMaxTotalProgress) {
-            if (aCurSelfProgress == aMaxSelfProgress) {
-                databaseSaver.isSqliteDownloadComplete = true;
+            if (aCurTotalProgress == aMaxTotalProgress) {
+
+                var storageService = Components.classes["@mozilla.org/storage/service;1"]  
+                                        .getService(Components.interfaces.mozIStorageService);  
+                var mDBConn = storageService.openDatabase(dbfile);
+
+                var time2 = (new Date).getTime();
+                var time1 = databaseSaver.time;
+                databaseSaver.time = 0;
+
+                databaseSaver.logTime(time2-time1);
+                // alert("SQLite Test Finished")
+                if (databaseSaver.incrementLoopVariables()) {
+                    databaseSaver.runTestOnce();
+                }
+
+
             }
         }
       };                  
@@ -209,17 +208,23 @@ var databaseSaver = {
       databaseSaver.time = (new Date).getTime();
       persist.saveURI(obj_URI, null, null, null, "", file);
   },
-  runJsonTestOnce:function(url) { 
-      var toFilename = "testdb.sqlite";
+  deleteFile:function(path) {
       var file = Components.classes["@mozilla.org/file/local;1"]
                                    .createInstance(Components.interfaces.nsILocalFile);
-      file.initWithPath("~/" + toFilename); // download destination
-      // Remove the file if it exists
+      file.initWithPath(path); 
       if (file.exists()) {
-          // alert("deleting file for databse for URL: " + url);
           file.remove(false);          
       }
+  },
+  runJsonTestOnce:function(url) {
+      var ko = new Date();
+      var ji = ko.getTime();
+      var filename = ji + ".sqlite";
+      var file = Components.classes["@mozilla.org/file/local;1"]
+                                   .createInstance(Components.interfaces.nsILocalFile);
+     file.initWithPath("~/" + filename); // download destination
 
+      // databaseSaver.deleteFile("~/" + filename);
       databaseSaver.time = (new Date).getTime();
       jQuery.get(url, function(results) {
           var storageService = Components.classes["@mozilla.org/storage/service;1"]  
